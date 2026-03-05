@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: gwt <task-description> [--base <branch>] [--no-tmux]
+       gwt --list
+       gwt --remove <task-description>
+
+Creates a git worktree and opens a tmux session for it.
+
+Options:
+  --base <branch>   Base branch to create worktree from (default: current branch)
+  --no-tmux         Create worktree only, don't create/attach tmux session
+  --list            List all worktrees
+  --remove <name>   Remove a worktree and its branch
+
+Examples:
+  gwt fix-auth-bug
+  gwt feature-new-api --base main
+  gwt --remove fix-auth-bug
+EOF
+}
+
+# Ensure we're in a git repo
+git_root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+  echo "Error: not inside a git repository" >&2
+  exit 1
+}
+
+project_name=$(basename "$git_root")
+worktrees_dir="$(dirname "$git_root")/.worktrees/${project_name}"
+
+# Parse arguments
+base_branch=""
+no_tmux=false
+action="create"
+task=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --base)
+      base_branch="$2"
+      shift 2
+      ;;
+    --no-tmux)
+      no_tmux=true
+      shift
+      ;;
+    --list)
+      action="list"
+      shift
+      ;;
+    --remove)
+      action="remove"
+      task="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -*)
+      echo "Unknown option: $1" >&2
+      usage
+      exit 1
+      ;;
+    *)
+      task="$1"
+      shift
+      ;;
+  esac
+done
+
+# --- List ---
+if [[ "$action" == "list" ]]; then
+  git -C "$git_root" worktree list
+  exit 0
+fi
+
+# --- Remove ---
+if [[ "$action" == "remove" ]]; then
+  [[ -z "$task" ]] && { echo "Error: provide task name to remove" >&2; exit 1; }
+  worktree_path="${worktrees_dir}/${task}"
+  branch_name="${task}"
+  session_name="${project_name} - ${task}"
+
+  # Kill tmux session if it exists
+  tmux kill-session -t "$session_name" 2>/dev/null && echo "Killed tmux session: ${session_name}"
+
+  # Remove worktree
+  if [[ -d "$worktree_path" ]]; then
+    git -C "$git_root" worktree remove "$worktree_path" --force
+    echo "Removed worktree: ${worktree_path}"
+  else
+    echo "Worktree not found: ${worktree_path}"
+  fi
+
+  # Remove Claude Code project symlink
+  claude_projects_dir="$HOME/.claude/projects"
+  worktree_project_key=$(echo "$worktree_path" | sed 's|^/|-|; s|/|-|g')
+  if [[ -L "${claude_projects_dir}/${worktree_project_key}" ]]; then
+    rm "${claude_projects_dir}/${worktree_project_key}"
+    echo "Removed Claude Code history link: ${worktree_project_key}"
+  fi
+
+  # Delete branch
+  git -C "$git_root" branch -d "$branch_name" 2>/dev/null && echo "Deleted branch: ${branch_name}" || true
+  exit 0
+fi
+
+# --- Create ---
+[[ -z "$task" ]] && { usage; exit 1; }
+
+if [[ -z "$base_branch" ]]; then
+  base_branch=$(git -C "$git_root" rev-parse --abbrev-ref HEAD)
+fi
+
+branch_name="${task}"
+worktree_path="${worktrees_dir}/${task}"
+session_name="${project_name} - ${task}"
+
+# Create worktrees directory if needed
+mkdir -p "$worktrees_dir"
+
+# Create worktree
+if [[ -d "$worktree_path" ]]; then
+  echo "Worktree already exists: ${worktree_path}"
+else
+  git -C "$git_root" worktree add -b "$branch_name" "$worktree_path" "$base_branch"
+  echo "Created worktree: ${worktree_path} (branch: ${branch_name}, base: ${base_branch})"
+fi
+
+# Symlink Claude Code project dir so worktree shares conversation history with main repo
+claude_projects_dir="$HOME/.claude/projects"
+main_project_key=$(echo "$git_root" | sed 's|^/|-|; s|/|-|g')
+worktree_project_key=$(echo "$worktree_path" | sed 's|^/|-|; s|/|-|g')
+if [[ -d "${claude_projects_dir}/${main_project_key}" ]] && [[ ! -e "${claude_projects_dir}/${worktree_project_key}" ]]; then
+  ln -s "${claude_projects_dir}/${main_project_key}" "${claude_projects_dir}/${worktree_project_key}"
+  echo "Linked Claude Code history: ${worktree_project_key} → ${main_project_key}"
+fi
+
+# Create or attach tmux session
+if [[ "$no_tmux" == true ]]; then
+  echo "Worktree ready at: ${worktree_path}"
+  exit 0
+fi
+
+if tmux has-session -t "$session_name" 2>/dev/null; then
+  echo "Tmux session already exists: ${session_name}"
+else
+  tmux new-session -d -s "$session_name" -c "$worktree_path"
+  # Send cd after shell init to override any default directory in .zshrc
+  tmux send-keys -t "$session_name" "cd '$worktree_path'" Enter
+  echo "Created tmux session: ${session_name}"
+fi
+
+# Attach or switch to session
+if [[ -n "${TMUX:-}" ]]; then
+  tmux switch-client -t "$session_name"
+else
+  tmux attach-session -t "$session_name"
+fi
