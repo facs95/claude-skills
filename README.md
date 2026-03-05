@@ -16,10 +16,7 @@ claude-skills/
 │   ├── plan.md                   # Implementation planning
 │   ├── implement.md              # Plan execution
 │   ├── research.md               # Codebase research
-│   ├── setup-worktree-skills.md  # Meta-skill: generate project worktree skills
-│   ├── chat-sdk-gen-docs.md      # Chat SDK documentation generation
-│   ├── gen-docs-init.md          # Documentation generation init
-│   └── gen-docs.md               # Documentation generation
+│   └── setup-worktree-skills.md  # Meta-skill: generate project worktree skills
 │
 └── projects/                     # Project-specific skills
     └── realio/                   # (go to <project>/.claude/commands/)
@@ -47,14 +44,6 @@ Creates and queries Linear tickets with proper labels, priorities, and structure
 ### `/setup-worktree-skills` — Worktree Skills Generator
 Meta-skill that analyzes the current project (package manager, branch convention, base branch) and generates project-specific `/worktree` and `/worktree-clean` skills tailored to that project's workflow. Integrates with `gwt`, Linear, and Claude Code history sharing.
 
-### `/gen-docs-init` — Documentation Generation Init
-Interactive setup for documentation generation. Asks questions about the product, features, audience, and tech stack, then creates a `doc-gen.config.json` and starter guide files optimized for RAG systems.
-
-### `/gen-docs` — Documentation Generation
-Analyzes a codebase and generates vectorization-optimized documentation chunks (JSON files) suitable for RAG retrieval. Produces API, component, type, and function docs with semantic metadata, code references, and a manifest file.
-
-### `/chat-sdk-gen-docs` — Chat SDK Documentation Generation
-Specialized variant of `/gen-docs` tailored for Chat SDK projects. Same RAG-optimized chunk output format.
 
 ## Tools
 
