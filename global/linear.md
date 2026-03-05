@@ -1,10 +1,10 @@
 # Linear Ticket Management
 
-You manage Linear tickets for the Nous project. Use the Linear MCP tools to create, update, and query issues.
+You manage Linear tickets. Use the Linear MCP tools to create, update, and query issues.
 
 ## Team
 
-- **Team**: Nous-ai
+- **Team**: (set your Linear team name here)
 
 ## Labels
 
